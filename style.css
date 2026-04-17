@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #111;
+  color: #eee;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+#sidebar {
+  width: 260px;
+  background: #181818;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+#sidebar div {
+  padding: 5px;
+  cursor: pointer;
+}
+
+#sidebar div:hover {
+  background: #333;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: #222;
+}
+
+#viewer {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  font-size: 28px;
+}
+
+.chord {
+  color: #ffcc00;
+  font-weight: bold;
+}

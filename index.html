@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChordPro App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <button id="importBtn">➕ Importar canciones</button>
+    <button id="newSetlist">➕ Setlist</button>
+    <input id="search" placeholder="Buscar...">
+
+    <h3>Setlists</h3>
+    <div id="setlists"></div>
+
+    <h3>Canciones</h3>
+    <div id="songs"></div>
+
+    <input type="file" id="fileInput" multiple accept=".cho,.txt" hidden>
+  </aside>
+
+  <!-- Main -->
+  <main>
+    <header class="toolbar">
+      <button id="transposeDown">−</button>
+      <span id="keyLabel">Key: —</span>
+      <button id="transposeUp">+</button>
+
+      <button id="playScroll">▶</button>
+      <button id="stopScroll">⏹</button>
+
+      <input id="speed" type="range" min="0" max="5" step="0.2" value="1">
+
+      <input id="fontSize" type="range" min="16" max="60" value="28">
+    </header>
+
+    <div id="viewer"></div>
+  </main>
+
+</div>
+
+<script src="https://unpkg.com/chordsheetjs@latest/dist/chordsheetjs.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
