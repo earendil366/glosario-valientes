@@ -1,23 +1,33 @@
-// 🎼 CHORDPRO
+// 🎼 ChordPro
 const parser = new chordsheetjs.ChordProParser();
 const formatter = new chordsheetjs.HtmlDivFormatter();
-let song = null;
+let currentSong = null;
 
-// 🎯 UI
+// UI
 const viewer = document.getElementById("viewer");
 const songsDiv = document.getElementById("songs");
 const setlistsDiv = document.getElementById("setlists");
 const fileInput = document.getElementById("fileInput");
 
-// 💾 BASE DE DATOS
+// DB
 let db;
 
-const request = indexedDB.open("ChordDB", 1);
+const request = indexedDB.open("ChordDB", 2);
 
 request.onupgradeneeded = e => {
   db = e.target.result;
-  db.createObjectStore("songs", { keyPath: "id", autoIncrement: true });
-  db.createObjectStore("setlists", { keyPath: "id", autoIncrement: true });
+
+  if (!db.objectStoreNames.contains("songs")) {
+    db.createObjectStore("songs", { keyPath: "id", autoIncrement: true });
+  }
+
+  if (!db.objectStoreNames.contains("setlists")) {
+    db.createObjectStore("setlists", { keyPath: "id", autoIncrement: true });
+  }
+
+  if (!db.objectStoreNames.contains("setlistSongs")) {
+    db.createObjectStore("setlistSongs", { keyPath: "id", autoIncrement: true });
+  }
 };
 
 request.onsuccess = e => {
@@ -26,58 +36,141 @@ request.onsuccess = e => {
   loadSetlists();
 };
 
-// ➕ GUARDAR CANCIÓN
+// 🎼 Render
+function render(content) {
+  currentSong = parser.parse(content);
+  viewer.innerHTML = formatter.format(currentSong);
+}
+
+// ➕ Guardar canción
 function saveSong(title, content) {
   const tx = db.transaction("songs", "readwrite");
   tx.objectStore("songs").add({ title, content });
 }
 
-// 📚 CARGAR CANCIONES
+// 📚 Cargar canciones
 function loadSongs() {
   songsDiv.innerHTML = "";
-  const tx = db.transaction("songs", "readonly");
-  const store = tx.objectStore("songs");
 
-  store.openCursor().onsuccess = e => {
+  const tx = db.transaction("songs", "readonly");
+
+  tx.objectStore("songs").openCursor().onsuccess = e => {
     const cursor = e.target.result;
     if (cursor) {
       const div = document.createElement("div");
+      div.className = "item";
       div.textContent = cursor.value.title;
+
+      div.draggable = true;
+      div.ondragstart = ev => {
+        ev.dataTransfer.setData("songId", cursor.value.id);
+      };
+
       div.onclick = () => render(cursor.value.content);
+
       songsDiv.appendChild(div);
       cursor.continue();
     }
   };
 }
 
-// 🗂 SETLISTS
+// 🗂 Guardar setlist
 function saveSetlist(name) {
   const tx = db.transaction("setlists", "readwrite");
   tx.objectStore("setlists").add({ name });
 }
 
+// 📂 Cargar setlists
 function loadSetlists() {
   setlistsDiv.innerHTML = "";
+
   const tx = db.transaction("setlists", "readonly");
 
   tx.objectStore("setlists").openCursor().onsuccess = e => {
     const cursor = e.target.result;
     if (cursor) {
-      const div = document.createElement("div");
-      div.textContent = "📁 " + cursor.value.name;
-      setlistsDiv.appendChild(div);
+      createSetlistUI(cursor.value);
       cursor.continue();
     }
   };
 }
 
-// 🎼 RENDER
-function render(text) {
-  song = parser.parse(text);
-  viewer.innerHTML = formatter.format(song);
+// 🧩 Crear UI de setlist
+function createSetlistUI(setlist) {
+  const container = document.createElement("div");
+  container.className = "setlist";
+
+  const title = document.createElement("div");
+  title.className = "setlist-title";
+  title.textContent = "📁 " + setlist.name;
+
+  const dropzone = document.createElement("div");
+  dropzone.className = "dropzone";
+
+  // Drag over
+  dropzone.ondragover = e => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  };
+
+  dropzone.ondragleave = () => {
+    dropzone.classList.remove("dragover");
+  };
+
+  // Drop
+  dropzone.ondrop = e => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+
+    const songId = Number(e.dataTransfer.getData("songId"));
+    addSongToSetlist(setlist.id, songId);
+    renderSetlistSongs(dropzone, setlist.id);
+  };
+
+  container.appendChild(title);
+  container.appendChild(dropzone);
+  setlistsDiv.appendChild(container);
+
+  renderSetlistSongs(dropzone, setlist.id);
 }
 
-// 📂 IMPORTAR ARCHIVOS
+// ➕ agregar canción a setlist
+function addSongToSetlist(setlistId, songId) {
+  const tx = db.transaction("setlistSongs", "readwrite");
+  tx.objectStore("setlistSongs").add({ setlistId, songId });
+}
+
+// 🎧 mostrar canciones dentro del setlist
+function renderSetlistSongs(container, setlistId) {
+  container.innerHTML = "";
+
+  const tx = db.transaction(["setlistSongs", "songs"], "readonly");
+  const relStore = tx.objectStore("setlistSongs");
+
+  relStore.openCursor().onsuccess = e => {
+    const cursor = e.target.result;
+    if (cursor) {
+      if (cursor.value.setlistId === setlistId) {
+        const songTx = db.transaction("songs", "readonly");
+        const songStore = songTx.objectStore("songs");
+
+        songStore.get(cursor.value.songId).onsuccess = ev => {
+          const song = ev.target.result;
+
+          const div = document.createElement("div");
+          div.className = "item";
+          div.textContent = song.title;
+          div.onclick = () => render(song.content);
+
+          container.appendChild(div);
+        };
+      }
+      cursor.continue();
+    }
+  };
+}
+
+// 📂 Importar archivos
 document.getElementById("importBtn").onclick = () => fileInput.click();
 
 fileInput.onchange = async e => {
@@ -88,7 +181,7 @@ fileInput.onchange = async e => {
   loadSongs();
 };
 
-// 🗂 CREAR SETLIST
+// 🗂 Crear setlist
 document.getElementById("newSetlist").onclick = () => {
   const name = prompt("Nombre del setlist:");
   if (!name) return;
@@ -96,20 +189,20 @@ document.getElementById("newSetlist").onclick = () => {
   loadSetlists();
 };
 
-// 🔎 BUSCAR
+// 🔎 Buscar
 document.getElementById("search").oninput = e => {
   const term = e.target.value.toLowerCase();
 
-  const tx = db.transaction("songs", "readonly");
-  const store = tx.objectStore("songs");
-
   songsDiv.innerHTML = "";
 
-  store.openCursor().onsuccess = ev => {
+  const tx = db.transaction("songs", "readonly");
+
+  tx.objectStore("songs").openCursor().onsuccess = ev => {
     const cursor = ev.target.result;
     if (cursor) {
       if (cursor.value.title.toLowerCase().includes(term)) {
         const div = document.createElement("div");
+        div.className = "item";
         div.textContent = cursor.value.title;
         div.onclick = () => render(cursor.value.content);
         songsDiv.appendChild(div);
@@ -119,23 +212,23 @@ document.getElementById("search").oninput = e => {
   };
 };
 
-// 🎹 TRANSPOSICIÓN
+// 🎹 Transposición
 document.getElementById("transposeUp").onclick = () => {
-  song = song.transpose(1);
-  viewer.innerHTML = formatter.format(song);
+  currentSong = currentSong.transpose(1);
+  viewer.innerHTML = formatter.format(currentSong);
 };
 
 document.getElementById("transposeDown").onclick = () => {
-  song = song.transpose(-1);
-  viewer.innerHTML = formatter.format(song);
+  currentSong = currentSong.transpose(-1);
+  viewer.innerHTML = formatter.format(currentSong);
 };
 
-// 🔍 TAMAÑO LETRA
+// 🔍 Tamaño letra
 document.getElementById("fontSize").oninput = e => {
   viewer.style.fontSize = e.target.value + "px";
 };
 
-// ⏱ SCROLL
+// ⏱ Scroll
 let scrolling = false;
 let speed = 1;
 

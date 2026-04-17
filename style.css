@@ -17,12 +17,32 @@ body {
   overflow-y: auto;
 }
 
-#sidebar div {
-  padding: 5px;
+.item {
+  padding: 6px;
   cursor: pointer;
+  border-radius: 4px;
 }
 
-#sidebar div:hover {
+.item:hover {
+  background: #333;
+}
+
+.setlist {
+  border: 1px solid #444;
+  margin-bottom: 8px;
+  padding: 5px;
+}
+
+.setlist-title {
+  font-weight: bold;
+}
+
+.dropzone {
+  min-height: 20px;
+  padding: 5px;
+}
+
+.dropzone.dragover {
   background: #333;
 }
 
