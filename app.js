@@ -1,3 +1,63 @@
+let db;
+
+const request = indexedDB.open("ChordDB", 1);
+
+request.onupgradeneeded = (e) => {
+  db = e.target.result;
+
+  // canciones
+  const songs = db.createObjectStore("songs", {
+    keyPath: "id",
+    autoIncrement: true
+  });
+
+  songs.createIndex("title", "title", { unique: false });
+
+  // setlists
+  db.createObjectStore("setlists", {
+    keyPath: "id",
+    autoIncrement: true
+  });
+
+  // relación
+  db.createObjectStore("setlistSongs", {
+    keyPath: "id",
+    autoIncrement: true
+  });
+};
+
+request.onsuccess = (e) => {
+  db = e.target.result;
+  console.log("Base de datos lista 🚀");
+};
+
+request.onerror = () => {
+  console.error("Error al crear DB");
+};
+function saveSong(title, content) {
+  const tx = db.transaction("songs", "readwrite");
+  const store = tx.objectStore("songs");
+
+  store.add({ title, content });
+}
+function getSongs(callback) {
+  const tx = db.transaction("songs", "readonly");
+  const store = tx.objectStore("songs");
+
+  const songs = [];
+
+  store.openCursor().onsuccess = (e) => {
+    const cursor = e.target.result;
+
+    if (cursor) {
+      songs.push(cursor.value);
+      cursor.continue();
+    } else {
+      callback(songs);
+    }
+  };
+}
+
 // 🎼 ChordPro
 const parser = new chordsheetjs.ChordProParser();
 const formatter = new chordsheetjs.HtmlDivFormatter();
