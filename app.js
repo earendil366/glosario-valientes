@@ -1,84 +1,46 @@
-let db;
-
-const request = indexedDB.open("ChordDB", 1);
-
-request.onupgradeneeded = (e) => {
-  db = e.target.result;
-
-  // canciones
-  const songs = db.createObjectStore("songs", {
-    keyPath: "id",
-    autoIncrement: true
-  });
-
-  songs.createIndex("title", "title", { unique: false });
-
-  // setlists
-  db.createObjectStore("setlists", {
-    keyPath: "id",
-    autoIncrement: true
-  });
-
-  // relación
-  db.createObjectStore("setlistSongs", {
-    keyPath: "id",
-    autoIncrement: true
-  });
-};
-
-request.onsuccess = (e) => {
-  db = e.target.result;
-  console.log("Base de datos lista 🚀");
-};
-
-request.onerror = () => {
-  console.error("Error al crear DB");
-};
-function saveSong(title, content) {
-  const tx = db.transaction("songs", "readwrite");
-  const store = tx.objectStore("songs");
-
-  store.add({ title, content });
-}
-function getSongs(callback) {
-  const tx = db.transaction("songs", "readonly");
-  const store = tx.objectStore("songs");
-
-  const songs = [];
-
-  store.openCursor().onsuccess = (e) => {
-    const cursor = e.target.result;
-
-    if (cursor) {
-      songs.push(cursor.value);
-      cursor.continue();
-    } else {
-      callback(songs);
-    }
-  };
-}
-
-// 🎼 ChordPro
+/**********************
+ * 🎼 CHORDPRO
+ **********************/
 const parser = new chordsheetjs.ChordProParser();
 const formatter = new chordsheetjs.HtmlDivFormatter();
 let currentSong = null;
 
-// UI
+/**********************
+ * 🎯 UI
+ **********************/
 const viewer = document.getElementById("viewer");
+const keyLabel = document.getElementById("keyLabel");
+
 const songsDiv = document.getElementById("songs");
 const setlistsDiv = document.getElementById("setlists");
-const fileInput = document.getElementById("fileInput");
 
-// DB
+const importBtn = document.getElementById("importBtn");
+const newSetlistBtn = document.getElementById("newSetlist");
+const fileInput = document.getElementById("fileInput");
+const searchInput = document.getElementById("search");
+
+const transposeUpBtn = document.getElementById("transposeUp");
+const transposeDownBtn = document.getElementById("transposeDown");
+
+const playBtn = document.getElementById("playScroll");
+const stopBtn = document.getElementById("stopScroll");
+const speedInput = document.getElementById("speed");
+
+const fontSizeInput = document.getElementById("fontSize");
+
+/**********************
+ * 💾 DATABASE (IndexedDB)
+ **********************/
 let db;
 
-const request = indexedDB.open("ChordDB", 2);
+const request = indexedDB.open("ChordDB", 3);
 
-request.onupgradeneeded = e => {
+request.onupgradeneeded = (e) => {
   db = e.target.result;
 
   if (!db.objectStoreNames.contains("songs")) {
-    db.createObjectStore("songs", { keyPath: "id", autoIncrement: true });
+    const s = db.createObjectStore("songs", { keyPath: "id", autoIncrement: true });
+    s.createIndex("title", "title", { unique: false });
   }
 
   if (!db.objectStoreNames.contains("setlists")) {
@@ -86,67 +48,99 @@ request.onupgradeneeded = e => {
   }
 
   if (!db.objectStoreNames.contains("setlistSongs")) {
+    // relación + orden opcional
     db.createObjectStore("setlistSongs", { keyPath: "id", autoIncrement: true });
   }
 };
 
-request.onsuccess = e => {
+request.onsuccess = (e) => {
   db = e.target.result;
   loadSongs();
   loadSetlists();
 };
 
-// 🎼 Render
+request.onerror = () => {
+  console.error("Error al abrir DB");
+};
+
+/**********************
+ * 🧠 HELPERS
+ **********************/
+function extractTitle(text, fallback = "Sin título") {
+  const m = text.match(/\{title:\s*(.*?)\}/i);
+  return m ? m[1].trim() : fallback;
+}
+
+/**********************
+ * 🎼 RENDER
+ **********************/
 function render(content) {
   currentSong = parser.parse(content);
   viewer.innerHTML = formatter.format(currentSong);
+  updateKey();
 }
 
-// ➕ Guardar canción
+function updateKey() {
+  try {
+    keyLabel.textContent = "Key: " + (currentSong?.metadata?.key || "—");
+  } catch {
+    keyLabel.textContent = "Key: —";
+  }
+}
+
+/**********************
+ * 📚 SONGS
+ **********************/
 function saveSong(title, content) {
   const tx = db.transaction("songs", "readwrite");
   tx.objectStore("songs").add({ title, content });
 }
 
-// 📚 Cargar canciones
-function loadSongs() {
+function loadSongs(filter = "") {
   songsDiv.innerHTML = "";
+  const term = filter.toLowerCase();
 
   const tx = db.transaction("songs", "readonly");
-
-  tx.objectStore("songs").openCursor().onsuccess = e => {
+  tx.objectStore("songs").openCursor().onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.textContent = cursor.value.title;
+      const { id, title, content } = cursor.value;
 
-      div.draggable = true;
-      div.ondragstart = ev => {
-        ev.dataTransfer.setData("songId", cursor.value.id);
-      };
+      if (!term || title.toLowerCase().includes(term)) {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.textContent = title;
 
-      div.onclick = () => render(cursor.value.content);
+        // Drag
+        div.draggable = true;
+        div.ondragstart = (ev) => {
+          ev.dataTransfer.setData("songId", id);
+        };
 
-      songsDiv.appendChild(div);
+        // Click
+        div.onclick = () => render(content);
+
+        songsDiv.appendChild(div);
+      }
+
       cursor.continue();
     }
   };
 }
 
-// 🗂 Guardar setlist
+/**********************
+ * 🗂 SETLISTS
+ **********************/
 function saveSetlist(name) {
   const tx = db.transaction("setlists", "readwrite");
   tx.objectStore("setlists").add({ name });
 }
 
-// 📂 Cargar setlists
 function loadSetlists() {
   setlistsDiv.innerHTML = "";
 
   const tx = db.transaction("setlists", "readonly");
-
-  tx.objectStore("setlists").openCursor().onsuccess = e => {
+  tx.objectStore("setlists").openCursor().onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
       createSetlistUI(cursor.value);
@@ -155,7 +149,6 @@ function loadSetlists() {
   };
 }
 
-// 🧩 Crear UI de setlist
 function createSetlistUI(setlist) {
   const container = document.createElement("div");
   container.className = "setlist";
@@ -168,7 +161,7 @@ function createSetlistUI(setlist) {
   dropzone.className = "dropzone";
 
   // Drag over
-  dropzone.ondragover = e => {
+  dropzone.ondragover = (e) => {
     e.preventDefault();
     dropzone.classList.add("dragover");
   };
@@ -178,11 +171,13 @@ function createSetlistUI(setlist) {
   };
 
   // Drop
-  dropzone.ondrop = e => {
+  dropzone.ondrop = (e) => {
     e.preventDefault();
     dropzone.classList.remove("dragover");
 
     const songId = Number(e.dataTransfer.getData("songId"));
+    if (!songId) return;
+
     addSongToSetlist(setlist.id, songId);
     renderSetlistSongs(dropzone, setlist.id);
   };
@@ -194,112 +189,120 @@ function createSetlistUI(setlist) {
   renderSetlistSongs(dropzone, setlist.id);
 }
 
-// ➕ agregar canción a setlist
+/**********************
+ * 🔗 RELACIONES
+ **********************/
 function addSongToSetlist(setlistId, songId) {
   const tx = db.transaction("setlistSongs", "readwrite");
   tx.objectStore("setlistSongs").add({ setlistId, songId });
 }
 
-// 🎧 mostrar canciones dentro del setlist
 function renderSetlistSongs(container, setlistId) {
   container.innerHTML = "";
 
   const tx = db.transaction(["setlistSongs", "songs"], "readonly");
   const relStore = tx.objectStore("setlistSongs");
 
-  relStore.openCursor().onsuccess = e => {
+  relStore.openCursor().onsuccess = (e) => {
     const cursor = e.target.result;
-    if (cursor) {
-      if (cursor.value.setlistId === setlistId) {
-        const songTx = db.transaction("songs", "readonly");
-        const songStore = songTx.objectStore("songs");
 
-        songStore.get(cursor.value.songId).onsuccess = ev => {
+    if (cursor) {
+      const rel = cursor.value;
+
+      if (rel.setlistId === setlistId) {
+        const songStore = tx.objectStore("songs");
+        songStore.get(rel.songId).onsuccess = (ev) => {
           const song = ev.target.result;
+          if (!song) return;
 
           const div = document.createElement("div");
           div.className = "item";
           div.textContent = song.title;
+
           div.onclick = () => render(song.content);
 
           container.appendChild(div);
         };
       }
+
       cursor.continue();
     }
   };
 }
 
-// 📂 Importar archivos
-document.getElementById("importBtn").onclick = () => fileInput.click();
+/**********************
+ * 📂 IMPORTAR
+ **********************/
+importBtn.onclick = () => fileInput.click();
 
-fileInput.onchange = async e => {
+fileInput.onchange = async (e) => {
   for (let file of e.target.files) {
     const text = await file.text();
-    saveSong(file.name, text);
+    const title = extractTitle(text, file.name);
+    saveSong(title, text);
   }
   loadSongs();
 };
 
-// 🗂 Crear setlist
-document.getElementById("newSetlist").onclick = () => {
+/**********************
+ * 🔎 BUSCAR
+ **********************/
+searchInput.oninput = (e) => {
+  loadSongs(e.target.value);
+};
+
+/**********************
+ * ➕ NUEVO SETLIST
+ **********************/
+newSetlistBtn.onclick = () => {
   const name = prompt("Nombre del setlist:");
   if (!name) return;
   saveSetlist(name);
   loadSetlists();
 };
 
-// 🔎 Buscar
-document.getElementById("search").oninput = e => {
-  const term = e.target.value.toLowerCase();
-
-  songsDiv.innerHTML = "";
-
-  const tx = db.transaction("songs", "readonly");
-
-  tx.objectStore("songs").openCursor().onsuccess = ev => {
-    const cursor = ev.target.result;
-    if (cursor) {
-      if (cursor.value.title.toLowerCase().includes(term)) {
-        const div = document.createElement("div");
-        div.className = "item";
-        div.textContent = cursor.value.title;
-        div.onclick = () => render(cursor.value.content);
-        songsDiv.appendChild(div);
-      }
-      cursor.continue();
-    }
-  };
-};
-
-// 🎹 Transposición
-document.getElementById("transposeUp").onclick = () => {
+/**********************
+ * 🎹 TRANSPOSICIÓN
+ **********************/
+transposeUpBtn.onclick = () => {
+  if (!currentSong) return;
   currentSong = currentSong.transpose(1);
   viewer.innerHTML = formatter.format(currentSong);
+  updateKey();
 };
 
-document.getElementById("transposeDown").onclick = () => {
+transposeDownBtn.onclick = () => {
+  if (!currentSong) return;
   currentSong = currentSong.transpose(-1);
   viewer.innerHTML = formatter.format(currentSong);
+  updateKey();
 };
 
-// 🔍 Tamaño letra
-document.getElementById("fontSize").oninput = e => {
+/**********************
+ * 🔍 TAMAÑO LETRA
+ **********************/
+fontSizeInput.oninput = (e) => {
   viewer.style.fontSize = e.target.value + "px";
 };
 
-// ⏱ Scroll
+/**********************
+ * ⏱ SCROLL
+ **********************/
 let scrolling = false;
 let speed = 1;
 
-document.getElementById("speed").oninput = e => speed = e.target.value;
+speedInput.oninput = (e) => {
+  speed = parseFloat(e.target.value);
+};
 
-document.getElementById("playScroll").onclick = () => {
+playBtn.onclick = () => {
   scrolling = true;
   scrollLoop();
 };
 
-document.getElementById("stopScroll").onclick = () => scrolling = false;
+stopBtn.onclick = () => {
+  scrolling = false;
+};
 
 function scrollLoop() {
   if (!scrolling) return;
